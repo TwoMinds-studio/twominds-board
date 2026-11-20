@@ -1,0 +1,1856 @@
+<!DOCTYPE html>
+<html lang="pl" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TwoMinds Studio — Nowoczesna Tablica Brainstormingowa GDD</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #090b10;
+      color: #f1f5f9;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    #board-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+    .glass-surface {
+      background: rgba(15, 19, 28, 0.82);
+      backdrop-filter: blur(18px) saturate(160%);
+      -webkit-backdrop-filter: blur(18px) saturate(160%);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+    .dock-btn {
+      position: relative;
+      transition: all 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .dock-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      transform: translateY(-1px);
+    }
+    .dock-btn.active {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      color: #ffffff;
+      box-shadow: 0 6px 18px rgba(99, 102, 241, 0.45);
+    }
+    .swatch-dot {
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .swatch-dot.active {
+      transform: scale(1.2);
+      box-shadow: 0 0 0 2px #0f131c, 0 0 0 4px #a855f7;
+    }
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
+    }
+    .brand-glow {
+      animation: pulseGlow 4s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body>
+  <div id="app-root" class="relative w-full h-full overflow-hidden select-none">
+    <!-- Nieskończone płótno HiDPI -->
+    <canvas id="board-canvas"></canvas>
+
+    <!-- Górny pasek nawigacji i akcji (Linear / Framer style) -->
+    <header class="fixed top-3.5 left-3.5 right-3.5 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+      <!-- Lewy blok: Marka TwoMinds + Nawigacja po 5 strefach GDD -->
+      <div class="glass-surface rounded-2xl px-3.5 py-2 flex items-center gap-3 pointer-events-auto">
+        <div class="flex items-center gap-2.5 pr-3 border-r border-white/10">
+          <div class="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-amber-400 p-[1px] shadow-lg shadow-indigo-500/20">
+            <div class="w-full h-full rounded-[11px] bg-[#0b0e16] flex items-center justify-center font-extrabold text-[11px] tracking-tighter text-white">
+              2M
+            </div>
+          </div>
+          <div class="leading-none">
+            <div class="text-xs font-extrabold tracking-tight text-white flex items-center gap-1.5">
+              TwoMinds <span class="text-[10px] font-mono-code px-1.5 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-400/20">BOARD</span>
+            </div>
+            <div class="text-[10px] text-slate-400 mt-0.5">Projekt: Gang 3D • GDD v0.1</div>
+          </div>
+        </div>
+
+        <nav class="hidden xl:flex items-center gap-1 text-[11px] font-medium text-slate-300">
+          <button data-jump="zone1" class="jump-btn px-2.5 py-1.5 rounded-xl hover:bg-white/10 hover:text-white transition">1. Tożsamość</button>
+          <button data-jump="zone2" class="jump-btn px-2.5 py-1.5 rounded-xl hover:bg-white/10 hover:text-white transition">2. Pętla Gry</button>
+          <button data-jump="zone3" class="jump-btn px-2.5 py-1.5 rounded-xl hover:bg-white/10 hover:text-white transition">3. Mapa v0.1</button>
+          <button data-jump="zone4" class="jump-btn px-2.5 py-1.5 rounded-xl hover:bg-white/10 hover:text-white transition">4. Mechaniki</button>
+          <button data-jump="zone5" class="jump-btn px-2.5 py-1.5 rounded-xl hover:bg-white/10 hover:text-white transition">5. Zakres v0.1</button>
+        </nav>
+      </div>
+
+      <!-- Środkowy kontekstowy inspektor zaznaczonego obiektu -->
+      <div id="context-inspector" class="hidden glass-surface rounded-2xl px-3 py-1.5 flex items-center gap-2 pointer-events-auto">
+        <span class="text-[10px] font-mono-code uppercase tracking-wider text-slate-400 px-1">Zaznaczono</span>
+        <div class="h-4 w-px bg-white/10"></div>
+        <div id="inspector-colors" class="flex items-center gap-1.5">
+          <button data-card-style="amber" class="insp-style-btn w-5 h-5 rounded-full bg-amber-400/90 border border-white/30 hover:scale-110 transition" title="Styl Bursztynowy"></button>
+          <button data-card-style="sky" class="insp-style-btn w-5 h-5 rounded-full bg-sky-400/90 border border-white/30 hover:scale-110 transition" title="Styl Błękitny"></button>
+          <button data-card-style="emerald" class="insp-style-btn w-5 h-5 rounded-full bg-emerald-400/90 border border-white/30 hover:scale-110 transition" title="Styl Szmaragdowy"></button>
+          <button data-card-style="violet" class="insp-style-btn w-5 h-5 rounded-full bg-purple-400/90 border border-white/30 hover:scale-110 transition" title="Styl Fioletowy"></button>
+          <button data-card-style="rose" class="insp-style-btn w-5 h-5 rounded-full bg-rose-400/90 border border-white/30 hover:scale-110 transition" title="Styl Karmazynowy"></button>
+          <button data-card-style="slate" class="insp-style-btn w-5 h-5 rounded-full bg-slate-700 border border-white/30 hover:scale-110 transition" title="Styl Grafitowy"></button>
+        </div>
+        <div class="h-4 w-px bg-white/10"></div>
+        <button id="btn-insp-duplicate" class="px-2 py-1 rounded-lg text-[11px] font-medium text-slate-200 hover:bg-white/10 transition" title="Duplikuj (Ctrl+D)">
+          Duplikuj
+        </button>
+        <button id="btn-insp-delete" class="px-2 py-1 rounded-lg text-[11px] font-medium text-rose-300 hover:bg-rose-500/20 transition" title="Usuń (Delete)">
+          Usuń
+        </button>
+      </div>
+
+      <!-- Prawy blok: Cofnij / Ponów, Wklej, Eksport, Reset -->
+      <div class="glass-surface rounded-2xl p-1.5 flex items-center gap-1 pointer-events-auto">
+        <button id="btn-undo" class="px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-white/10 hover:text-white transition" title="Cofnij (Ctrl+Z)">
+          ↶
+        </button>
+        <button id="btn-redo" class="px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-white/10 hover:text-white transition" title="Ponów (Ctrl+Y)">
+          ↷
+        </button>
+        <div class="h-4 w-px bg-white/10 mx-0.5"></div>
+        <button id="btn-paste-info" class="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-white/5 hover:bg-white/10 text-amber-300 border border-amber-400/20 transition" title="Wklej ze schowka (Ctrl+V) lub przeciągnij plik obrazu">
+          📋 Wklej <span class="hidden sm:inline font-mono-code text-[10px] text-slate-400 ml-1">Ctrl+V</span>
+        </button>
+        <button id="btn-export-png" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white shadow-md shadow-indigo-500/25 transition">
+          Eksport PNG
+        </button>
+        <button id="btn-reset-board" class="px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-400 hover:text-rose-300 hover:bg-rose-500/10 transition" title="Resetuj do szablonu TwoMinds">
+          Reset
+        </button>
+      </div>
+    </header>
+
+    <!-- Lewy pływający panel stylu rysowania (Kolor i Grubość) -->
+    <aside class="fixed left-3.5 top-1/2 -translate-y-1/2 z-20 glass-surface rounded-2xl p-2.5 flex flex-col items-center gap-3">
+      <span class="text-[9px] font-mono-code uppercase tracking-widest text-slate-400">Kolor</span>
+      <div id="color-swatches" class="flex flex-col gap-2.5">
+        <button data-color="#f8fafc" class="swatch-dot active w-5 h-5 rounded-full bg-slate-100 border border-white/40" title="Biały neon"></button>
+        <button data-color="#38bdf8" class="swatch-dot w-5 h-5 rounded-full bg-sky-400" title="Błękit"></button>
+        <button data-color="#a855f7" class="swatch-dot w-5 h-5 rounded-full bg-purple-500" title="Fiolet TwoMinds"></button>
+        <button data-color="#34d399" class="swatch-dot w-5 h-5 rounded-full bg-emerald-400" title="Szmaragd"></button>
+        <button data-color="#fbbf24" class="swatch-dot w-5 h-5 rounded-full bg-amber-400" title="Bursztyn"></button>
+        <button data-color="#fb7185" class="swatch-dot w-5 h-5 rounded-full bg-rose-400" title="Karmazyn"></button>
+      </div>
+
+      <div class="w-full h-px bg-white/10"></div>
+
+      <span class="text-[9px] font-mono-code uppercase tracking-widest text-slate-400">Grubość</span>
+      <div id="stroke-sizes" class="flex flex-col items-center gap-1.5">
+        <button data-size="2" class="size-btn w-7 h-7 rounded-xl hover:bg-white/10 flex items-center justify-center transition" title="Cienka linia (2px)">
+          <span class="w-1.5 h-1.5 rounded-full bg-slate-200"></span>
+        </button>
+        <button data-size="4" class="size-btn active w-7 h-7 rounded-xl bg-white/15 flex items-center justify-center transition" title="Średnia linia (4px)">
+          <span class="w-2.5 h-2.5 rounded-full bg-slate-200"></span>
+        </button>
+        <button data-size="8" class="size-btn w-7 h-7 rounded-xl hover:bg-white/10 flex items-center justify-center transition" title="Gruby mazak (8px)">
+          <span class="w-3.5 h-3.5 rounded-full bg-slate-200"></span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Dolny pływający dock narzędzi (Figma / Framer style) -->
+    <div class="fixed bottom-4 left-1/2 -translate-x-1/2 z-20 glass-surface rounded-2xl p-1.5 flex items-center gap-1 max-w-[95vw] overflow-x-auto">
+      <button data-tool="select" class="dock-btn active px-3 py-2 rounded-xl text-xs font-semibold text-slate-200 flex items-center gap-1.5" title="Kursor / Zaznacz (V)">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l7.07 17 2.51-7.39L21 11.07z"/></svg>
+        <span class="hidden md:inline">Wybór</span>
+        <kbd class="hidden lg:inline text-[10px] font-mono-code opacity-60">V</kbd>
+      </button>
+
+      <button data-tool="pan" class="dock-btn px-3 py-2 rounded-xl text-xs font-semibold text-slate-200 flex items-center gap-1.5" title="Przesuwanie widoku (H lub Spacja)">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8l-1.46-1.46a2 2 0 0 0-2.83 2.83L7.5 21h8.5a4 4 0 0 0 4-4v-5a2 2 0 0 0-4 0v1"/></svg>
+        <span class="hidden md:inline">Przesuń</span>
+      </button>
+
+      <div class="h-5 w-px bg-white/10 mx-0.5"></div>
+
+      <button data-tool="pen" class="dock-btn px-3 py-2 rounded-xl text-xs font-semibold text-slate-200 flex items-center gap-1.5" title="Pióro / Mazak (P)">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+        <span class="hidden md:inline">Mazak</span>
+        <kbd class="hidden lg:inline text-[10px] font-mono-code opacity-60">P</kbd>
+      </button>
+
+      <button data-tool="highlighter" class="dock-btn px-3 py-2 rounded-xl text-xs font-semibold text-slate-200 flex items-center gap-1.5" title="Zakreślacz neonowy (H)">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l-6 6v3h9l3-3"/><path d="M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>
+        <span class="hidden md:inline">Zakreślacz</span>
+        <kbd class="hidden lg:inline text-[10px] font-mono-code opacity-60">H</kbd>
+      </button>
+
+      <button data-tool="sticky" class="dock-btn px-3 py-2 rounded-xl text-xs font-semibold text-slate-200 flex items-center gap-1.5" title="Karteczka Sticky Note (S)">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v6h6"/></svg>
+        <span class="hidden md:inline">Karteczka</span>
+        <kbd class="hidden lg:inline text-[10px] font-mono-code opacity-60">S</kbd>
+      </button>
+
+      <button data-tool="text" class="dock-btn px-3 py-2 rounded-xl text-xs font-semibold text-slate-200 flex items-center gap-1.5" title="Blok tekstowy (T)">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+        <span class="hidden md:inline">Tekst</span>
+        <kbd class="hidden lg:inline text-[10px] font-mono-code opacity-60">T</kbd>
+      </button>
+
+      <button data-tool="rect" class="dock-btn px-3 py-2 rounded-xl text-xs font-semibold text-slate-200 flex items-center gap-1.5" title="Ramka / Sekcja (R)">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
+        <span class="hidden md:inline">Ramka</span>
+        <kbd class="hidden lg:inline text-[10px] font-mono-code opacity-60">R</kbd>
+      </button>
+
+      <button data-tool="arrow" class="dock-btn px-3 py-2 rounded-xl text-xs font-semibold text-slate-200 flex items-center gap-1.5" title="Strzałka łącząca (A)">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="9 5 19 5 19 15"/></svg>
+        <span class="hidden md:inline">Strzałka</span>
+        <kbd class="hidden lg:inline text-[10px] font-mono-code opacity-60">A</kbd>
+      </button>
+
+      <button data-tool="eraser" class="dock-btn px-3 py-2 rounded-xl text-xs font-semibold text-slate-200 flex items-center gap-1.5" title="Gumka (E)">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>
+        <span class="hidden md:inline">Gumka</span>
+        <kbd class="hidden lg:inline text-[10px] font-mono-code opacity-60">E</kbd>
+      </button>
+    </div>
+
+    <!-- Lewy dolny znak wodny TwoMinds Studio -->
+    <div class="fixed bottom-4 left-4 z-10 pointer-events-none hidden sm:flex items-center gap-2.5 px-3 py-2 rounded-2xl glass-surface">
+      <span class="w-2 h-2 rounded-full bg-indigo-400 brand-glow"></span>
+      <span class="text-[11px] font-bold tracking-wider uppercase text-slate-200">TwoMinds</span>
+      <span class="text-[10px] font-mono-code text-slate-400">CREATIVE WORKSPACE</span>
+    </div>
+
+    <!-- Prawy dolny kontroler Zoom i Dopasowania -->
+    <div class="fixed bottom-4 right-4 z-20 glass-surface rounded-2xl px-2.5 py-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-200">
+      <button id="btn-zoom-out" class="w-7 h-7 rounded-xl hover:bg-white/10 flex items-center justify-center text-base transition" title="Oddal">−</button>
+      <span id="zoom-label" class="w-12 text-center font-mono-code text-[11px] text-slate-300">100%</span>
+      <button id="btn-zoom-in" class="w-7 h-7 rounded-xl hover:bg-white/10 flex items-center justify-center text-base transition" title="Przybliż">+</button>
+      <div class="h-4 w-px bg-white/10"></div>
+      <button id="btn-fit-view" class="px-2.5 py-1 rounded-xl hover:bg-white/10 text-[11px] font-semibold text-indigo-300 transition" title="Dopasuj cały projekt do ekranu">
+        Dopasuj
+      </button>
+    </div>
+
+    <!-- Edytor tekstu na płótnie (dwuklik) -->
+    <div id="inline-editor-wrap" class="hidden fixed z-30">
+      <textarea id="inline-editor"
+        class="w-full h-full p-3 rounded-2xl border-2 border-indigo-400 bg-[#0d121d]/95 text-slate-100 shadow-2xl resize-none focus:outline-none text-xs leading-relaxed"></textarea>
+    </div>
+
+    <!-- Komunikaty Toast -->
+    <div id="toast-area" class="fixed top-20 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-1.5 pointer-events-none"></div>
+  </div>
+
+  <script>
+    /**
+     * TwoMinds Studio — Nowoczesna Tablica Brainstormingowa GDD (Dark Mode + Glassmorphism)
+     * Funkcje:
+     * - Infinite Canvas HiDPI (Pan, Zoom na kursorze, Dopasuj do ekranu)
+     * - Wyraźny znak wodny TwoMinds w siatce tła, w rogu ekranu oraz na eksportowanym obrazie PNG
+     * - Kompletny szablon GDD gry o gangu (5 stref: Tożsamość, Pętla 6 kroków, Mapa v0.1, Mechaniki, Zakres v0.1)
+     * - Narzędzia: Wybór (V), Przesuwanie, Mazak (P), Zakreślacz (H), Karteczka (S), Tekst (T), Ramka (R), Strzałka (A), Gumka (E)
+     * - Pełna edycja: przesuwanie, zmiana rozmiaru, dwuklik do pisania, inspektor stylów, duplikowanie (Ctrl+D), Cofnij/Ponów (Ctrl+Z / Ctrl+Y)
+     * - Wklejanie ze schowka (Ctrl+V) oraz Drag & Drop obrazków na płótno
+     */
+
+    const STORAGE_KEY = "twominds_modern_board_v2";
+    const canvas = document.getElementById("board-canvas");
+    const ctx = canvas.getContext("2d");
+
+    // Stan kamery i kursora
+    let camera = { x: 100, y: 90, zoom: 0.72 };
+    let lastMouseWorld = { x: 400, y: 300 };
+
+    // Narzędzia i style
+    let currentTool = "select";
+    let currentColor = "#f8fafc";
+    let currentStrokeSize = 4;
+
+    // Dane tablicy i historia Cofnij/Ponów
+    let elements = [];
+    let undoStack = [];
+    let redoStack = [];
+    let selectedId = null;
+
+    // Interakcja
+    let isPointerDown = false;
+    let isSpacePressed = false;
+    let dragMode = null; // pan | move | resize | draw | shape | erase
+    let dragStartWorld = { x: 0, y: 0 };
+    let dragStartScreen = { x: 0, y: 0 };
+    let elementStartBounds = null;
+    let activeDraftElement = null;
+    let editingElementId = null;
+
+    const imageCache = new Map();
+
+    // Palety stylów nowoczesnych karteczek (Dark Glass + Neon Accent)
+    const CARD_THEMES = {
+      amber: {
+        bg: "rgba(38, 28, 16, 0.92)",
+        border: "#f59e0b",
+        headerBg: "rgba(245, 158, 11, 0.16)",
+        accent: "#fbbf24",
+        text: "#fef3c7"
+      },
+      sky: {
+        bg: "rgba(14, 29, 44, 0.92)",
+        border: "#38bdf8",
+        headerBg: "rgba(56, 189, 248, 0.16)",
+        accent: "#7dd3fc",
+        text: "#e0f2fe"
+      },
+      emerald: {
+        bg: "rgba(13, 35, 29, 0.92)",
+        border: "#10b981",
+        headerBg: "rgba(16, 185, 129, 0.16)",
+        accent: "#6ee7b7",
+        text: "#d1fae5"
+      },
+      violet: {
+        bg: "rgba(28, 19, 46, 0.92)",
+        border: "#a855f7",
+        headerBg: "rgba(168, 85, 247, 0.18)",
+        accent: "#d8b4fe",
+        text: "#f3e8ff"
+      },
+      rose: {
+        bg: "rgba(42, 16, 25, 0.92)",
+        border: "#f43f5e",
+        headerBg: "rgba(244, 63, 94, 0.18)",
+        accent: "#fda4af",
+        text: "#ffe4e6"
+      },
+      slate: {
+        bg: "rgba(22, 27, 38, 0.94)",
+        border: "#64748b",
+        headerBg: "rgba(148, 163, 184, 0.14)",
+        accent: "#cbd5e1",
+        text: "#f1f5f9"
+      }
+    };
+
+    const ZONE_BOOKMARKS = {
+      zone1: { x: 50, y: 70, zoom: 0.88 },
+      zone2: { x: 740, y: 70, zoom: 0.85 },
+      zone3: { x: 1540, y: 70, zoom: 0.88 },
+      zone4: { x: 50, y: 730, zoom: 0.84 },
+      zone5: { x: 1540, y: 730, zoom: 0.88 }
+    };
+
+    function showToast(msg, tone = "indigo") {
+      const area = document.getElementById("toast-area");
+      const el = document.createElement("div");
+      const tones = {
+        indigo: "bg-slate-900/95 text-indigo-100 border-indigo-400/40",
+        success: "bg-slate-900/95 text-emerald-200 border-emerald-400/40",
+        warn: "bg-slate-900/95 text-amber-200 border-amber-400/40"
+      };
+      el.className = `px-4 py-2 rounded-xl border text-xs font-semibold shadow-2xl backdrop-blur-md transition-all duration-300 ${tones[tone] || tones.indigo}`;
+      el.textContent = msg;
+      area.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = "0";
+        el.style.transform = "translateY(-6px)";
+        setTimeout(() => el.remove(), 260);
+      }, 2600);
+    }
+
+    function uid() {
+      return "tm_" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
+    }
+
+    function pushHistory() {
+      undoStack.push(JSON.stringify(elements));
+      if (undoStack.length > 50) undoStack.shift();
+      redoStack = [];
+    }
+
+    function saveBoard() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ elements, camera }));
+      } catch (e) {
+        console.warn("Błąd zapisu localStorage:", e);
+      }
+    }
+
+    function loadBoard() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return false;
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.elements) && parsed.elements.length > 0) {
+          elements = parsed.elements;
+          if (parsed.camera) camera = parsed.camera;
+          preloadImages();
+          return true;
+        }
+      } catch (e) {
+        console.warn("Błąd odczytu localStorage:", e);
+      }
+      return false;
+    }
+
+    function preloadImages() {
+      elements.forEach((el) => {
+        if (el.type === "image" && el.src && !imageCache.has(el.id)) {
+          const img = new Image();
+          img.onload = () => {
+            imageCache.set(el.id, img);
+            render();
+          };
+          img.src = el.src;
+        }
+      });
+    }
+
+    // Kompletny szablon TwoMinds Studio z wszystkimi 5 strefami gry
+    function buildTwoMindsTemplate() {
+      const items = [];
+
+      // Nagłówek główny na tablicy
+      items.push({
+        id: uid(),
+        type: "text",
+        x: 60,
+        y: -18,
+        w: 1200,
+        h: 56,
+        text: "TWOMINDS STUDIO  •  GDD: WSPÓLNY GANG (3D Z GÓRY • STYL OVER THE HILL)",
+        color: "#f8fafc",
+        fontSize: 22,
+        bold: true
+      });
+
+      // =========================================================
+      // STREFA 1: TOŻSAMOŚĆ GANGU I ZAŁOŻENIA
+      // =========================================================
+      items.push({
+        id: uid(),
+        type: "rect",
+        x: 60,
+        y: 60,
+        w: 630,
+        h: 610,
+        color: "#38bdf8",
+        fill: "rgba(14, 24, 38, 0.55)",
+        strokeWidth: 2,
+        label: "01 // TOŻSAMOŚĆ GANGU I ZAŁOŻENIA"
+      });
+
+      items.push({
+        id: uid(),
+        type: "sticky",
+        x: 90,
+        y: 118,
+        w: 270,
+        h: 215,
+        theme: "sky",
+        badge: "WIZJA & KAMERA",
+        text: "• Stylizowany świat 3D, kamera lekko z góry (inspiracja: Over the Hill)\n• Wspólna kampania ze stałą ekipą znajomych (+ opcja solo z botami)\n• Trwały świat między sesjami: majątek, ludzie, biznesy, reputacja"
+      });
+
+      items.push({
+        id: uid(),
+        type: "sticky",
+        x: 388,
+        y: 118,
+        w: 270,
+        h: 215,
+        theme: "amber",
+        badge: "MOTOCYKLE I AUTA",
+        text: "• Motocykle jako fundament tożsamości, ale dostępne też samochody\n• Wspólna jazda autem lub we dwójkę na motocyklu\n• Free Roam: swobodna jazda bez misji podnosi morale i rozpoznawalność"
+      });
+
+      items.push({
+        id: uid(),
+        type: "sticky",
+        x: 90,
+        y: 358,
+        w: 270,
+        h: 275,
+        theme: "emerald",
+        badge: "SIEDZIBA GANGU",
+        text: "• Na starcie: wybór nazwy, logo, barw/strojów oraz miejscówki na Siedzibę\n• Siedziba to fizyczny punkt na mapie, nie menu w kieszeni\n• W niej zapadają decyzje: biznesy, rekrutacja, zakupy, dyplomacja i planowanie akcji"
+      });
+
+      items.push({
+        id: uid(),
+        type: "sticky",
+        x: 388,
+        y: 358,
+        w: 270,
+        h: 275,
+        theme: "violet",
+        badge: "MOODBOARD (WKLEJ CTRL+V)",
+        text: "• Skopiuj screen z Over the Hill lub szkic pojazdu i wciśnij Ctrl+V tutaj!\n• Wyraźne sylwetki motocykli, aut i radiowozów\n• Czytelny kontrast między asfaltem a szutrem"
+      });
+
+      // =========================================================
+      // STREFA 2: GŁÓWNA PĘTLA ROZGRYWKI (6 KROKÓW)
+      // =========================================================
+      items.push({
+        id: uid(),
+        type: "rect",
+        x: 740,
+        y: 60,
+        w: 750,
+        h: 610,
+        color: "#10b981",
+        fill: "rgba(12, 28, 26, 0.55)",
+        strokeWidth: 2,
+        label: "02 // GŁÓWNA PĘTLA ROZGRYWKI (6 KROKÓW)"
+      });
+
+      const loopCards = [
+        { x: 775, y: 125, w: 295, h: 130, theme: "sky", badge: "KROK 1 • EKSPLORACJA", text: "Odkrywanie miasta i okolic: lokalni dilerzy, cele napadów (np. jubiler) i nowe trasy." },
+        { x: 1155, y: 125, w: 295, h: 130, theme: "sky", badge: "KROK 2 • SIEDZIBA", text: "Powrót do bazy, omówienie odkrytych okazji i podejmowanie decyzji gangu." },
+        { x: 1155, y: 310, w: 295, h: 130, theme: "amber", badge: "KROK 3 • PRZYGOTOWANIE", text: "Dobór botów, pojazdów, zasobów oraz wytyczenie Trasy Głównej i Planu B." },
+        { x: 1155, y: 495, w: 295, h: 140, theme: "rose", badge: "KROK 4 • OSOBISTA AKCJA", text: "Jazda, przewóz towaru, reagowanie na gliny, inne gangi i błędy ekipy w terenie." },
+        { x: 775, y: 495, w: 295, h: 140, theme: "violet", badge: "KROK 5 • KONSEKWENCJE", text: "Rozliczenie: zarobek, straty, spalone auta, aresztowania, przesłuchania i przeskok czasu." },
+        { x: 775, y: 310, w: 295, h: 130, theme: "emerald", badge: "KROK 6 • ROZWÓJ", text: "Inwestycje w biznesy, szkolenie ekipy, tuning i podział na kasę gangu / prywatną." }
+      ];
+
+      loopCards.forEach((c) => {
+        items.push({
+          id: uid(),
+          type: "sticky",
+          x: c.x,
+          y: c.y,
+          w: c.w,
+          h: c.h,
+          theme: c.theme,
+          badge: c.badge,
+          text: c.text
+        });
+      });
+
+      const loopArrows = [
+        { x1: 1075, y1: 190, x2: 1150, y2: 190 },
+        { x1: 1302, y1: 260, x2: 1302, y2: 305 },
+        { x1: 1302, y1: 445, x2: 1302, y2: 490 },
+        { x1: 1150, y1: 565, x2: 1075, y2: 565 },
+        { x1: 922, y1: 490, x2: 922, y2: 445 },
+        { x1: 922, y1: 305, x2: 922, y2: 260 }
+      ];
+      loopArrows.forEach((a) => {
+        items.push({
+          id: uid(),
+          type: "arrow",
+          x1: a.x1,
+          y1: a.y1,
+          x2: a.x2,
+          y2: a.y2,
+          color: "#94a3b8",
+          strokeWidth: 3
+        });
+      });
+
+      // =========================================================
+      // STREFA 3: INTERAKTYWNY SZKIC MAPY PROTOTYPU v0.1
+      // =========================================================
+      items.push({
+        id: uid(),
+        type: "rect",
+        x: 1540,
+        y: 60,
+        w: 690,
+        h: 610,
+        color: "#f59e0b",
+        fill: "rgba(32, 23, 14, 0.55)",
+        strokeWidth: 2,
+        label: "03 // SZKIC MAPY PROTOTYPU v0.1 (TRASA GŁÓWNA VS PLAN B)"
+      });
+
+      items.push({
+        id: uid(),
+        type: "sticky",
+        x: 1575,
+        y: 495,
+        w: 195,
+        h: 120,
+        theme: "emerald",
+        badge: "START • BAZA",
+        text: "🏠 SIEDZIBA GANGU\nWybór pojazdu, składu i Planu B przed wyjazdem."
+      });
+
+      items.push({
+        id: uid(),
+        type: "sticky",
+        x: 1795,
+        y: 330,
+        w: 195,
+        h: 120,
+        theme: "rose",
+        badge: "KOMPLIKACJA",
+        text: "🚨 BLOKADA POLICJI\nNa głównej szosie — wymusza decyzję w trakcie jazdy."
+      });
+
+      items.push({
+        id: uid(),
+        type: "sticky",
+        x: 1620,
+        y: 135,
+        w: 220,
+        h: 125,
+        theme: "amber",
+        badge: "OBJAZD • PLAN B",
+        text: "🌲 SKRÓT SZUTROWY\nBoty z wysoką Zaradnością odbijają same; słabsze trzeba poprowadzić."
+      });
+
+      items.push({
+        id: uid(),
+        type: "sticky",
+        x: 2015,
+        y: 265,
+        w: 185,
+        h: 125,
+        theme: "sky",
+        badge: "CEL MISJI",
+        text: "📦 PUNKT ZRZUTU\nDostarczenie towaru i rozliczenie wyniku."
+      });
+
+      // Trasa główna (czerwona) i Plan B (błękitna)
+      items.push({ id: uid(), type: "arrow", x1: 1770, y1: 495, x2: 1845, y2: 455, color: "#fb7185", strokeWidth: 4 });
+      items.push({ id: uid(), type: "arrow", x1: 1995, y1: 380, x2: 2012, y2: 345, color: "#fb7185", strokeWidth: 4 });
+      items.push({ id: uid(), type: "arrow", x1: 1665, y1: 490, x2: 1720, y2: 265, color: "#38bdf8", strokeWidth: 4 });
+      items.push({ id: uid(), type: "arrow", x1: 1845, y1: 200, x2: 2010, y2: 300, color: "#38bdf8", strokeWidth: 4 });
+
+      // =========================================================
+      // STREFA 4: SYSTEMY I MECHANIKI
+      // =========================================================
+      items.push({
+        id: uid(),
+        type: "rect",
+        x: 60,
+        y: 720,
+        w: 1430,
+        h: 470,
+        color: "#a855f7",
+        fill: "rgba(22, 16, 36, 0.58)",
+        strokeWidth: 2,
+        label: "04 // SYSTEMY I MECHANIKI GRY (RDZEŃ + POMYSŁY TWOMINDS)"
+      });
+
+      items.push({
+        id: uid(),
+        type: "sticky",
+        x: 90,
+        y: 775,
+        w: 320,
+        h: 380,
+        theme: "amber",
+        badge: "BOTY & ZARADNOŚĆ",
+        text: "• Brak najemników znikąd — budujesz stałą ekipę\n• Cechy postaci:\n  - Jazda & Strzelanie & Skradanie\n  - Zaradność: samodzielne przejście na Plan B bez prowadzenia za rękę\n  - Lojalność: zachowanie po zatrzymaniu (osobna od skilla!)\n• Rola pasażera: skaner glin + nawigator skrótów"
+      });
+
+      items.push({
+        id: uid(),
+        type: "sticky",
+        x: 440,
+        y: 775,
+        w: 320,
+        h: 380,
+        theme: "rose",
+        badge: "ZATRZYMANIE & WIĘZIENIE",
+        text: "• Złapanie gracza NIE kończy akcji!\n• Gracz przejmuje kolejnego wolnego bota w akcji (z jego realnymi statystykami)\n• Przesłuchanie po akcji:\n  - Zeznawać: krótki przeskok czasu, duże straty kasy\n  - Milczeć: dłuższy przeskok czasu, brak wsypania ekipy"
+      });
+
+      items.push({
+        id: uid(),
+        type: "sticky",
+        x: 790,
+        y: 775,
+        w: 320,
+        h: 380,
+        theme: "violet",
+        badge: "STATUS „SPALONY” POJAZDU",
+        text: "• Auto lub motocykl użyty w pościgu zyskuje status SPALONY\n• Jazda spalonym pojazdem natychmiast przyciąga patrole\n• Trzeba go ukryć w dziupli, przemalować lub użyć jako przynęty\n• Nadaje praktyczny sens posiadaniu kilku pojazdów w garażu"
+      });
+
+      items.push({
+        id: uid(),
+        type: "sticky",
+        x: 1140,
+        y: 775,
+        w: 320,
+        h: 380,
+        theme: "emerald",
+        badge: "EKONOMIA & BIZNESY",
+        text: "• Wspólna kasa gangu vs prywatne portfele graczy\n• Legalne biznesy = przykrywka, pranie brudnej gotówki i realne przysługi (np. warsztat zmywa status SPALONY, bar daje alibi)\n• Skalowanie: własna dystrybucja vs lokalny diler vs układ z gangiem"
+      });
+
+      // =========================================================
+      // STREFA 5: ZAKRES PROTOTYPU v0.1 VS WERSJA PEŁNA
+      // =========================================================
+      items.push({
+        id: uid(),
+        type: "rect",
+        x: 1540,
+        y: 720,
+        w: 690,
+        h: 470,
+        color: "#f43f5e",
+        fill: "rgba(35, 15, 24, 0.58)",
+        strokeWidth: 2.5,
+        label: "05 // ZAKRES PROTOTYPU v0.1 VS WERSJA PEŁNA"
+      });
+
+      items.push({
+        id: uid(),
+        type: "sticky",
+        x: 1575,
+        y: 775,
+        w: 300,
+        h: 380,
+        theme: "emerald",
+        badge: "MVP v0.1 • ROBIMY TERAZ",
+        text: "1. Dwóch graczy / 1 wspólny gang\n2. Jedna prosta fizyczna Siedziba\n3. Mała, stała mapa z 1 blokadą i objazdem (Plan B)\n4. Jeden typ pojazdu + satysfakcjonująca jazda\n5. Jedno zadanie (przewóz towaru) + 1 bot z reakcją na Plan B\n6. Nagroda/strata + 1 decyzja rozwoju + zapis"
+      });
+
+      items.push({
+        id: uid(),
+        type: "sticky",
+        x: 1900,
+        y: 775,
+        w: 300,
+        h: 380,
+        theme: "slate",
+        badge: "BACKLOG v0.2+ • PÓŹNIEJ",
+        text: "• Losowy generator miasta i inne miasta\n• Rozbudowane strzelaniny i system osłon\n• Głęboki tuning wizualny i mechaniczny\n• Rywalizacja wielu gangów znajomych na jednej mapie\n• Zaawansowana dyplomacja i wojny terytorialne"
+      });
+
+      return items;
+    }
+
+    // Konwersje współrzędnych
+    function screenToWorld(sx, sy) {
+      return {
+        x: (sx - camera.x) / camera.zoom,
+        y: (sy - camera.y) / camera.zoom
+      };
+    }
+
+    function worldToScreen(wx, wy) {
+      return {
+        x: wx * camera.zoom + camera.x,
+        y: wy * camera.zoom + camera.y
+      };
+    }
+
+    function getElementBounds(el) {
+      if (el.type === "pen" || el.type === "highlighter") {
+        if (!el.points || el.points.length === 0) return { x: 0, y: 0, w: 0, h: 0 };
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const p of el.points) {
+          if (p.x < minX) minX = p.x;
+          if (p.y < minY) minY = p.y;
+          if (p.x > maxX) maxX = p.x;
+          if (p.y > maxY) maxY = p.y;
+        }
+        const pad = (el.strokeWidth || 4) + 6;
+        return { x: minX - pad, y: minY - pad, w: Math.max(20, maxX - minX + pad * 2), h: Math.max(20, maxY - minY + pad * 2) };
+      }
+      if (el.type === "arrow") {
+        const minX = Math.min(el.x1, el.x2) - 12;
+        const minY = Math.min(el.y1, el.y2) - 12;
+        const maxX = Math.max(el.x1, el.x2) + 12;
+        const maxY = Math.max(el.y1, el.y2) + 12;
+        return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+      }
+      return { x: el.x, y: el.y, w: el.w || 220, h: el.h || 140 };
+    }
+
+    function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const lenSq = dx * dx + dy * dy;
+      if (lenSq === 0) return Math.hypot(px - x1, py - y1);
+      let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+      t = Math.max(0, Math.min(1, t));
+      return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+    }
+
+    function hitTestElement(el, wx, wy) {
+      if (el.type === "arrow") {
+        return pointToSegmentDistance(wx, wy, el.x1, el.y1, el.x2, el.y2) <= 14;
+      }
+      if (el.type === "pen" || el.type === "highlighter") {
+        for (let i = 0; i < el.points.length - 1; i++) {
+          const p1 = el.points[i];
+          const p2 = el.points[i + 1];
+          if (pointToSegmentDistance(wx, wy, p1.x, p1.y, p2.x, p2.y) <= (el.strokeWidth || 4) + 10) {
+            return true;
+          }
+        }
+        return false;
+      }
+      const b = getElementBounds(el);
+      return wx >= b.x && wx <= b.x + b.w && wy >= b.y && wy <= b.y + b.h;
+    }
+
+    function hitTestResizeHandle(el, wx, wy) {
+      if (!el || el.type === "pen" || el.type === "highlighter" || el.type === "arrow") return false;
+      const b = getElementBounds(el);
+      return Math.hypot(wx - (b.x + b.w), wy - (b.y + b.h)) <= 14 / camera.zoom;
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      const radius = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.arcTo(x + w, y, x + w, y + h, radius);
+      ctx.arcTo(x + w, y + h, x, y + h, radius);
+      ctx.arcTo(x, y + h, x, y, radius);
+      ctx.arcTo(x, y, x + w, y, radius);
+      ctx.closePath();
+    }
+
+    function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, maxHeight) {
+      const paragraphs = (text || "").split("\n");
+      let curY = y;
+      for (const para of paragraphs) {
+        if (para.trim() === "") {
+          curY += lineHeight * 0.65;
+          continue;
+        }
+        const words = para.split(" ");
+        let line = "";
+        for (let i = 0; i < words.length; i++) {
+          const testLine = line ? line + " " + words[i] : words[i];
+          if (ctx.measureText(testLine).width > maxWidth && line) {
+            ctx.fillText(line, x, curY);
+            line = words[i];
+            curY += lineHeight;
+            if (maxHeight && curY > y + maxHeight - lineHeight) return;
+          } else {
+            line = testLine;
+          }
+        }
+        if (line) {
+          ctx.fillText(line, x, curY);
+          curY += lineHeight;
+          if (maxHeight && curY > y + maxHeight - lineHeight) return;
+        }
+      }
+    }
+
+    // Renderowanie płótna HiDPI
+    function render() {
+      const parent = canvas.parentElement;
+      const w = parent ? parent.clientWidth : window.innerWidth;
+      const h = parent ? parent.clientHeight : window.innerHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+      if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+        canvas.width = Math.floor(w * dpr);
+        canvas.height = Math.floor(h * dpr);
+      }
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+
+      // Głębokie tło w stylu Linear/Framer z delikatnym radialnym blaskiem
+      const bgGrad = ctx.createRadialGradient(w * 0.5, h * 0.35, 60, w * 0.5, h * 0.5, Math.max(w, h) * 0.85);
+      bgGrad.addColorStop(0, "#111624");
+      bgGrad.addColorStop(1, "#080a0f");
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Siatka kropek i znak wodny TwoMinds
+      drawBackdropGridAndWatermark(w, h);
+
+      ctx.save();
+      ctx.translate(camera.x, camera.y);
+      ctx.scale(camera.zoom, camera.zoom);
+
+      // Kolejność warstw
+      const ordered = [
+        ...elements.filter((e) => e.type === "rect"),
+        ...elements.filter((e) => e.type === "highlighter"),
+        ...elements.filter((e) => e.type === "image" || e.type === "sticky" || e.type === "text"),
+        ...elements.filter((e) => e.type === "arrow" || e.type === "pen")
+      ];
+
+      for (const el of ordered) {
+        drawElement(el);
+      }
+
+      if (activeDraftElement) {
+        drawElement(activeDraftElement);
+      }
+
+      // Obrys zaznaczonego obiektu
+      if (selectedId) {
+        const sel = elements.find((e) => e.id === selectedId);
+        if (sel) {
+          const b = getElementBounds(sel);
+          ctx.save();
+          ctx.strokeStyle = "#818cf8";
+          ctx.lineWidth = 2 / camera.zoom;
+          ctx.setLineDash([6 / camera.zoom, 4 / camera.zoom]);
+          roundRect(ctx, b.x - 5, b.y - 5, b.w + 10, b.h + 10, 14);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          if (sel.type !== "pen" && sel.type !== "highlighter" && sel.type !== "arrow") {
+            const hs = 10 / camera.zoom;
+            ctx.fillStyle = "#818cf8";
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 1.8 / camera.zoom;
+            ctx.beginPath();
+            ctx.arc(b.x + b.w, b.y + b.h, hs * 0.65, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+      }
+
+      ctx.restore();
+      document.getElementById("zoom-label").textContent = `${Math.round(camera.zoom * 100)}%`;
+      updateContextInspector();
+    }
+
+    function drawBackdropGridAndWatermark(viewW, viewH) {
+      const step = 34 * camera.zoom;
+      if (step >= 10) {
+        const startX = ((camera.x % step) + step) % step;
+        const startY = ((camera.y % step) + step) % step;
+        ctx.fillStyle = "rgba(148, 163, 184, 0.14)";
+        for (let gx = startX; gx < viewW; gx += step) {
+          for (let gy = startY; gy < viewH; gy += step) {
+            ctx.fillRect(gx, gy, 1.4, 1.4);
+          }
+        }
+      }
+
+      // Elegancki powtarzający się znak wodny TwoMinds
+      const tileW = 520 * camera.zoom;
+      const tileH = 310 * camera.zoom;
+      if (tileW > 115) {
+        const ox = ((camera.x % tileW) + tileW) % tileW;
+        const oy = ((camera.y % tileH) + tileH) % tileH;
+        ctx.save();
+        ctx.fillStyle = "rgba(255, 255, 255, 0.026)";
+        ctx.font = `800 ${Math.max(12, Math.round(24 * camera.zoom))}px Inter, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        for (let x = ox - tileW; x < viewW + tileW; x += tileW) {
+          for (let y = oy - tileH; y < viewH + tileH; y += tileH) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(-0.2);
+            ctx.fillText("TWOMINDS", 0, 0);
+            ctx.restore();
+          }
+        }
+        ctx.restore();
+      }
+    }
+
+    function drawElement(el) {
+      ctx.save();
+
+      if (el.type === "rect") {
+        ctx.fillStyle = el.fill || "rgba(15, 23, 42, 0.55)";
+        ctx.strokeStyle = el.color || "#6366f1";
+        ctx.lineWidth = el.strokeWidth || 2;
+        roundRect(ctx, el.x, el.y, el.w, el.h, 20);
+        ctx.fill();
+        ctx.stroke();
+
+        if (el.label) {
+          ctx.fillStyle = el.color || "#a5b4fc";
+          ctx.font = "700 12px 'JetBrains Mono', monospace";
+          ctx.textBaseline = "top";
+          ctx.fillText(el.label, el.x + 20, el.y + 16);
+        }
+      } else if (el.type === "sticky") {
+        const theme = CARD_THEMES[el.theme] || CARD_THEMES.amber;
+
+        // Miękki cień karty
+        ctx.shadowColor = "rgba(0, 0, 0, 0.42)";
+        ctx.shadowBlur = 18;
+        ctx.shadowOffsetY = 8;
+
+        ctx.fillStyle = theme.bg;
+        ctx.strokeStyle = theme.border;
+        ctx.lineWidth = 1.5;
+        roundRect(ctx, el.x, el.y, el.w, el.h, 16);
+        ctx.fill();
+
+        ctx.shadowColor = "transparent";
+        ctx.stroke();
+
+        // Górny pasek karty / tag
+        let contentOffsetY = 16;
+        if (el.badge) {
+          ctx.fillStyle = theme.headerBg;
+          roundRect(ctx, el.x + 14, el.y + 12, el.w - 28, 24, 8);
+          ctx.fill();
+
+          ctx.fillStyle = theme.accent;
+          ctx.font = "700 10.5px 'JetBrains Mono', monospace";
+          ctx.textBaseline = "middle";
+          ctx.fillText(el.badge, el.x + 22, el.y + 24);
+          contentOffsetY = 46;
+        }
+
+        // Treść karty
+        ctx.fillStyle = theme.text;
+        ctx.font = "500 13px Inter, sans-serif";
+        ctx.textBaseline = "top";
+        drawWrappedText(ctx, el.text, el.x + 16, el.y + contentOffsetY, el.w - 32, 19, el.h - contentOffsetY - 12);
+      } else if (el.type === "text") {
+        ctx.fillStyle = el.color || "#f8fafc";
+        const size = el.fontSize || 16;
+        ctx.font = `${el.bold ? "800" : "500"} ${size}px Inter, sans-serif`;
+        ctx.textBaseline = "top";
+        drawWrappedText(ctx, el.text, el.x + 4, el.y + 4, el.w - 8, size * 1.38, el.h);
+      } else if (el.type === "image") {
+        const img = imageCache.get(el.id);
+        ctx.fillStyle = "#111827";
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.16)";
+        ctx.lineWidth = 2;
+        roundRect(ctx, el.x, el.y, el.w, el.h, 14);
+        ctx.fill();
+        ctx.stroke();
+        if (img) {
+          ctx.save();
+          roundRect(ctx, el.x, el.y, el.w, el.h, 14);
+          ctx.clip();
+          ctx.drawImage(img, el.x, el.y, el.w, el.h);
+          ctx.restore();
+        }
+      } else if (el.type === "pen" || el.type === "highlighter") {
+        if (el.points && el.points.length > 0) {
+          ctx.strokeStyle = el.color || "#f8fafc";
+          ctx.globalAlpha = el.type === "highlighter" ? 0.34 : 1.0;
+          ctx.lineWidth = el.type === "highlighter" ? Math.max(16, (el.strokeWidth || 4) * 3.5) : (el.strokeWidth || 4);
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          ctx.beginPath();
+          el.points.forEach((pt, idx) => {
+            if (idx === 0) ctx.moveTo(pt.x, pt.y);
+            else ctx.lineTo(pt.x, pt.y);
+          });
+          ctx.stroke();
+          ctx.globalAlpha = 1.0;
+        }
+      } else if (el.type === "arrow") {
+        drawNeonArrow(ctx, el.x1, el.y1, el.x2, el.y2, el.color || "#94a3b8", el.strokeWidth || 3);
+      }
+
+      ctx.restore();
+    }
+
+    function drawNeonArrow(ctx, x1, y1, x2, y2, color, width) {
+      const headLen = 13 + width;
+      const angle = Math.atan2(y2 - y1, x2 - x1);
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineCap = "round";
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
+      ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function updateContextInspector() {
+      const inspector = document.getElementById("context-inspector");
+      if (!selectedId) {
+        inspector.classList.add("hidden");
+        return;
+      }
+      const sel = elements.find((e) => e.id === selectedId);
+      if (!sel) {
+        inspector.classList.add("hidden");
+        return;
+      }
+      inspector.classList.remove("hidden");
+    }
+
+    function setTool(toolName) {
+      currentTool = toolName;
+      document.querySelectorAll(".dock-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.tool === toolName);
+      });
+      updateCursor();
+    }
+
+    function updateCursor() {
+      if (isSpacePressed || currentTool === "pan") {
+        canvas.style.cursor = isPointerDown ? "grabbing" : "grab";
+      } else if (["pen", "highlighter", "rect", "arrow"].includes(currentTool)) {
+        canvas.style.cursor = "crosshair";
+      } else if (currentTool === "eraser") {
+        canvas.style.cursor = "cell";
+      } else if (["text", "sticky"].includes(currentTool)) {
+        canvas.style.cursor = "copy";
+      } else {
+        canvas.style.cursor = "default";
+      }
+    }
+
+    function openInlineEditor(el) {
+      if (!el || !["sticky", "text", "rect"].includes(el.type)) return;
+      editingElementId = el.id;
+      const wrap = document.getElementById("inline-editor-wrap");
+      const textarea = document.getElementById("inline-editor");
+      const topLeft = worldToScreen(el.x, el.y);
+      const w = Math.max(180, el.w * camera.zoom);
+      const h = el.type === "rect" ? 54 : Math.max(96, el.h * camera.zoom);
+
+      wrap.style.left = `${Math.max(12, topLeft.x)}px`;
+      wrap.style.top = `${Math.max(66, topLeft.y)}px`;
+      wrap.style.width = `${w}px`;
+      wrap.style.height = `${h}px`;
+      wrap.classList.remove("hidden");
+
+      textarea.value = el.type === "rect" ? (el.label || "") : (el.text || "");
+      textarea.focus();
+      textarea.select();
+    }
+
+    function commitInlineEditor() {
+      const wrap = document.getElementById("inline-editor-wrap");
+      if (wrap.classList.contains("hidden") || !editingElementId) return;
+      const textarea = document.getElementById("inline-editor");
+      const el = elements.find((item) => item.id === editingElementId);
+      if (el) {
+        pushHistory();
+        if (el.type === "rect") el.label = textarea.value;
+        else el.text = textarea.value;
+        saveBoard();
+      }
+      editingElementId = null;
+      wrap.classList.add("hidden");
+      render();
+    }
+
+    function onPointerDown(e) {
+      if (editingElementId) commitInlineEditor();
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const worldPt = screenToWorld(sx, sy);
+      lastMouseWorld = worldPt;
+
+      isPointerDown = true;
+      dragStartScreen = { x: sx, y: sy };
+      dragStartWorld = worldPt;
+
+      if (e.button === 1 || isSpacePressed || currentTool === "pan") {
+        dragMode = "pan";
+        updateCursor();
+        return;
+      }
+
+      if (e.button !== 0) return;
+
+      if (currentTool === "eraser") {
+        dragMode = "erase";
+        eraseAt(worldPt.x, worldPt.y);
+        return;
+      }
+
+      if (currentTool === "pen" || currentTool === "highlighter") {
+        pushHistory();
+        dragMode = "draw";
+        activeDraftElement = {
+          id: uid(),
+          type: currentTool,
+          color: currentColor,
+          strokeWidth: currentStrokeSize,
+          points: [{ x: worldPt.x, y: worldPt.y }]
+        };
+        render();
+        return;
+      }
+
+      if (currentTool === "rect") {
+        pushHistory();
+        dragMode = "shape";
+        activeDraftElement = {
+          id: uid(),
+          type: "rect",
+          x: worldPt.x,
+          y: worldPt.y,
+          w: 1,
+          h: 1,
+          color: currentColor,
+          fill: "rgba(15, 23, 42, 0.55)",
+          strokeWidth: 2,
+          label: "NOWA SEKCJA // CLICK 2X"
+        };
+        render();
+        return;
+      }
+
+      if (currentTool === "arrow") {
+        pushHistory();
+        dragMode = "shape";
+        activeDraftElement = {
+          id: uid(),
+          type: "arrow",
+          x1: worldPt.x,
+          y1: worldPt.y,
+          x2: worldPt.x,
+          y2: worldPt.y,
+          color: currentColor,
+          strokeWidth: Math.max(3, currentStrokeSize)
+        };
+        render();
+        return;
+      }
+
+      if (currentTool === "sticky") {
+        pushHistory();
+        const themeKeys = Object.keys(CARD_THEMES);
+        const chosenTheme = themeKeys[elements.length % themeKeys.length];
+        const newCard = {
+          id: uid(),
+          type: "sticky",
+          x: worldPt.x - 125,
+          y: worldPt.y - 80,
+          w: 250,
+          h: 165,
+          theme: chosenTheme,
+          badge: "NOWA NOTATKA",
+          text: "Wpisz swój pomysł...\n(Kliknij dwukrotnie, aby edytować)"
+        };
+        elements.push(newCard);
+        selectedId = newCard.id;
+        saveBoard();
+        setTool("select");
+        render();
+        openInlineEditor(newCard);
+        return;
+      }
+
+      if (currentTool === "text") {
+        pushHistory();
+        const newText = {
+          id: uid(),
+          type: "text",
+          x: worldPt.x,
+          y: worldPt.y,
+          w: 280,
+          h: 64,
+          text: "Nagłówek lub notatka...",
+          color: currentColor,
+          fontSize: 17,
+          bold: false
+        };
+        elements.push(newText);
+        selectedId = newText.id;
+        saveBoard();
+        setTool("select");
+        render();
+        openInlineEditor(newText);
+        return;
+      }
+
+      if (currentTool === "select") {
+        const currentSel = elements.find((item) => item.id === selectedId);
+        if (currentSel && hitTestResizeHandle(currentSel, worldPt.x, worldPt.y)) {
+          pushHistory();
+          dragMode = "resize";
+          elementStartBounds = { ...getElementBounds(currentSel) };
+          return;
+        }
+
+        const nonRects = [...elements].reverse().filter((item) => item.type !== "rect");
+        const rects = [...elements].reverse().filter((item) => item.type === "rect");
+        const hit =
+          nonRects.find((item) => hitTestElement(item, worldPt.x, worldPt.y)) ||
+          rects.find((item) => hitTestElement(item, worldPt.x, worldPt.y));
+
+        if (hit) {
+          selectedId = hit.id;
+          pushHistory();
+          dragMode = "move";
+          if (hit.type === "arrow") {
+            elementStartBounds = { x1: hit.x1, y1: hit.y1, x2: hit.x2, y2: hit.y2 };
+          } else if (hit.type === "pen" || hit.type === "highlighter") {
+            elementStartBounds = { points: hit.points.map((p) => ({ ...p })) };
+          } else {
+            elementStartBounds = { x: hit.x, y: hit.y, w: hit.w, h: hit.h };
+          }
+          render();
+        } else {
+          selectedId = null;
+          dragMode = "pan";
+          updateCursor();
+          render();
+        }
+      }
+    }
+
+    function onPointerMove(e) {
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const worldPt = screenToWorld(sx, sy);
+      lastMouseWorld = worldPt;
+
+      if (!isPointerDown) return;
+
+      if (dragMode === "pan") {
+        camera.x += sx - dragStartScreen.x;
+        camera.y += sy - dragStartScreen.y;
+        dragStartScreen = { x: sx, y: sy };
+        render();
+        return;
+      }
+
+      if (dragMode === "erase") {
+        eraseAt(worldPt.x, worldPt.y);
+        return;
+      }
+
+      if (dragMode === "draw" && activeDraftElement) {
+        activeDraftElement.points.push({ x: worldPt.x, y: worldPt.y });
+        render();
+        return;
+      }
+
+      if (dragMode === "shape" && activeDraftElement) {
+        if (activeDraftElement.type === "rect") {
+          activeDraftElement.x = Math.min(dragStartWorld.x, worldPt.x);
+          activeDraftElement.y = Math.min(dragStartWorld.y, worldPt.y);
+          activeDraftElement.w = Math.max(30, Math.abs(worldPt.x - dragStartWorld.x));
+          activeDraftElement.h = Math.max(30, Math.abs(worldPt.y - dragStartWorld.y));
+        } else if (activeDraftElement.type === "arrow") {
+          activeDraftElement.x2 = worldPt.x;
+          activeDraftElement.y2 = worldPt.y;
+        }
+        render();
+        return;
+      }
+
+      if (dragMode === "move" && selectedId && elementStartBounds) {
+        const el = elements.find((item) => item.id === selectedId);
+        if (!el) return;
+        const dx = worldPt.x - dragStartWorld.x;
+        const dy = worldPt.y - dragStartWorld.y;
+
+        if (el.type === "arrow") {
+          el.x1 = elementStartBounds.x1 + dx;
+          el.y1 = elementStartBounds.y1 + dy;
+          el.x2 = elementStartBounds.x2 + dx;
+          el.y2 = elementStartBounds.y2 + dy;
+        } else if (el.type === "pen" || el.type === "highlighter") {
+          el.points = elementStartBounds.points.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+        } else {
+          el.x = elementStartBounds.x + dx;
+          el.y = elementStartBounds.y + dy;
+        }
+        render();
+        return;
+      }
+
+      if (dragMode === "resize" && selectedId && elementStartBounds) {
+        const el = elements.find((item) => item.id === selectedId);
+        if (!el) return;
+        const dx = worldPt.x - dragStartWorld.x;
+        const dy = worldPt.y - dragStartWorld.y;
+        el.w = Math.max(80, elementStartBounds.w + dx);
+        el.h = Math.max(48, elementStartBounds.h + dy);
+        render();
+      }
+    }
+
+    function onPointerUp() {
+      if (!isPointerDown) return;
+      isPointerDown = false;
+
+      if (activeDraftElement) {
+        if (
+          activeDraftElement.type === "arrow" &&
+          Math.hypot(activeDraftElement.x2 - activeDraftElement.x1, activeDraftElement.y2 - activeDraftElement.y1) < 12
+        ) {
+          undoStack.pop();
+        } else {
+          elements.push(activeDraftElement);
+          selectedId = activeDraftElement.id;
+        }
+        activeDraftElement = null;
+      }
+
+      dragMode = null;
+      elementStartBounds = null;
+      updateCursor();
+      saveBoard();
+      render();
+    }
+
+    function eraseAt(wx, wy) {
+      const idx = [...elements].reverse().findIndex((item) => hitTestElement(item, wx, wy));
+      if (idx !== -1) {
+        const realIndex = elements.length - 1 - idx;
+        pushHistory();
+        if (elements[realIndex].id === selectedId) selectedId = null;
+        elements.splice(realIndex, 1);
+        saveBoard();
+        render();
+      }
+    }
+
+    function duplicateSelected() {
+      if (!selectedId) return;
+      const orig = elements.find((e) => e.id === selectedId);
+      if (!orig) return;
+      pushHistory();
+      const copy = JSON.parse(JSON.stringify(orig));
+      copy.id = uid();
+      if (copy.type === "arrow") {
+        copy.x1 += 32;
+        copy.y1 += 32;
+        copy.x2 += 32;
+        copy.y2 += 32;
+      } else if (copy.type === "pen" || copy.type === "highlighter") {
+        copy.points = copy.points.map((p) => ({ x: p.x + 32, y: p.y + 32 }));
+      } else {
+        copy.x += 32;
+        copy.y += 32;
+      }
+      if (copy.type === "image" && imageCache.has(orig.id)) {
+        imageCache.set(copy.id, imageCache.get(orig.id));
+      }
+      elements.push(copy);
+      selectedId = copy.id;
+      saveBoard();
+      render();
+      showToast("Zduplikowano element na tablicy.", "indigo");
+    }
+
+    function embedImageFromDataUrl(dataUrl, targetWorldPt) {
+      const img = new Image();
+      img.onload = () => {
+        pushHistory();
+        const maxDim = 440;
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const id = uid();
+        imageCache.set(id, img);
+        elements.push({
+          id,
+          type: "image",
+          x: targetWorldPt.x - w / 2,
+          y: targetWorldPt.y - h / 2,
+          w,
+          h,
+          src: dataUrl
+        });
+        selectedId = id;
+        saveBoard();
+        render();
+        showToast("Osadzono grafikę na tablicy TwoMinds!", "success");
+      };
+      img.src = dataUrl;
+    }
+
+    function handlePaste(e) {
+      if (editingElementId) return;
+      const clipboardData = e.clipboardData || window.clipboardData;
+      if (!clipboardData) return;
+
+      const targetPt = { ...lastMouseWorld };
+
+      // Wklejanie obrazów ze schowka
+      const items = clipboardData.items;
+      if (items) {
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.type.indexOf("image") !== -1) {
+            e.preventDefault();
+            const file = item.getAsFile();
+            if (!file) continue;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              if (ev.target?.result) embedImageFromDataUrl(ev.target.result, targetPt);
+            };
+            reader.readAsDataURL(file);
+            return;
+          }
+        }
+      }
+
+      // Wklejanie tekstu ze schowka
+      const pastedText = clipboardData.getData("text/plain");
+      if (pastedText && pastedText.trim().length > 0) {
+        e.preventDefault();
+        pushHistory();
+        const themeKeys = Object.keys(CARD_THEMES);
+        const chosenTheme = themeKeys[elements.length % themeKeys.length];
+        const id = uid();
+        elements.push({
+          id,
+          type: "sticky",
+          x: targetPt.x - 135,
+          y: targetPt.y - 80,
+          w: 270,
+          h: Math.min(340, Math.max(125, 72 + Math.ceil(pastedText.length / 28) * 20)),
+          theme: chosenTheme,
+          badge: "WKLEJONA NOTATKA",
+          text: pastedText.trim()
+        });
+        selectedId = id;
+        saveBoard();
+        render();
+        showToast("Wklejono tekst jako nową kartę w miejscu kursora!", "success");
+      }
+    }
+
+    function exportBoardToPNG() {
+      const exportCanvas = document.createElement("canvas");
+      exportCanvas.width = canvas.width;
+      exportCanvas.height = canvas.height;
+      const ectx = exportCanvas.getContext("2d");
+
+      ectx.drawImage(canvas, 0, 0);
+
+      // Nowoczesny znak wodny TwoMinds Studio w prawym dolnym rogu PNG
+      const pad = 28;
+      const boxW = 330;
+      const boxH = 58;
+      const x = exportCanvas.width - boxW - pad;
+      const y = exportCanvas.height - boxH - pad;
+
+      ectx.fillStyle = "rgba(11, 15, 25, 0.92)";
+      roundRect(ectx, x, y, boxW, boxH, 14);
+      ectx.fill();
+      ectx.strokeStyle = "rgba(129, 140, 248, 0.45)";
+      ectx.lineWidth = 2;
+      ectx.stroke();
+
+      ectx.fillStyle = "#ffffff";
+      ectx.font = "800 17px Inter, sans-serif";
+      ectx.fillText("TwoMinds Studio • GDD Board", x + 18, y + 25);
+
+      ectx.fillStyle = "#94a3b8";
+      ectx.font = "500 12px 'JetBrains Mono', monospace";
+      ectx.fillText("Brainstorming Workspace • Gang 3D", x + 18, y + 44);
+
+      const link = document.createElement("a");
+      link.download = "TwoMinds_Studio_GDD_Board.png";
+      link.href = exportCanvas.toDataURL("image/png");
+      link.click();
+      showToast("Wyeksportowano tablicę TwoMinds do PNG!", "success");
+    }
+
+    function fitEntireBoard() {
+      if (elements.length === 0) {
+        camera = { x: 100, y: 100, zoom: 1 };
+        render();
+        return;
+      }
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const el of elements) {
+        const b = getElementBounds(el);
+        if (b.x < minX) minX = b.x;
+        if (b.y < minY) minY = b.y;
+        if (b.x + b.w > maxX) maxX = b.x + b.w;
+        if (b.y + b.h > maxY) maxY = b.y + b.h;
+      }
+      const parent = canvas.parentElement;
+      const viewW = parent ? parent.clientWidth : window.innerWidth;
+      const viewH = parent ? parent.clientHeight : window.innerHeight;
+      const contentW = Math.max(240, maxX - minX + 140);
+      const contentH = Math.max(240, maxY - minY + 170);
+      const newZoom = Math.max(0.24, Math.min(1.05, Math.min(viewW / contentW, viewH / contentH)));
+      camera.zoom = newZoom;
+      camera.x = (viewW - (maxX + minX) * newZoom) / 2;
+      camera.y = (viewH - (maxY + minY) * newZoom) / 2 + 12;
+      render();
+    }
+
+    function initEvents() {
+      window.addEventListener("resize", render);
+
+      canvas.addEventListener("pointerdown", onPointerDown);
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+
+      canvas.addEventListener("dblclick", (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const worldPt = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+        const hit = [...elements]
+          .reverse()
+          .find((item) => ["sticky", "text", "rect"].includes(item.type) && hitTestElement(item, worldPt.x, worldPt.y));
+        if (hit) {
+          selectedId = hit.id;
+          openInlineEditor(hit);
+        }
+      });
+
+      canvas.addEventListener(
+        "wheel",
+        (e) => {
+          e.preventDefault();
+          if (editingElementId) commitInlineEditor();
+          const rect = canvas.getBoundingClientRect();
+          const sx = e.clientX - rect.left;
+          const sy = e.clientY - rect.top;
+          const worldBefore = screenToWorld(sx, sy);
+
+          const factor = e.deltaY < 0 ? 1.1 : 0.91;
+          camera.zoom = Math.max(0.2, Math.min(2.6, camera.zoom * factor));
+
+          camera.x = sx - worldBefore.x * camera.zoom;
+          camera.y = sy - worldBefore.y * camera.zoom;
+          render();
+        },
+        { passive: false }
+      );
+
+      // Drag & Drop obrazków z dysku
+      canvas.addEventListener("dragover", (e) => e.preventDefault());
+      canvas.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const files = e.dataTransfer?.files;
+        if (!files || files.length === 0) return;
+        const file = files[0];
+        if (!file.type.startsWith("image/")) return;
+        const rect = canvas.getBoundingClientRect();
+        const dropWorld = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          if (ev.target?.result) embedImageFromDataUrl(ev.target.result, dropWorld);
+        };
+        reader.readAsDataURL(file);
+      });
+
+      window.addEventListener("paste", handlePaste);
+
+      window.addEventListener("keydown", (e) => {
+        if (editingElementId) {
+          if (e.key === "Escape") commitInlineEditor();
+          return;
+        }
+
+        if (e.code === "Space") {
+          isSpacePressed = true;
+          updateCursor();
+        }
+
+        if ((e.ctrlKey || e.metaKey) && e.code === "KeyZ") {
+          e.preventDefault();
+          if (undoStack.length > 0) {
+            redoStack.push(JSON.stringify(elements));
+            elements = JSON.parse(undoStack.pop());
+            preloadImages();
+            saveBoard();
+            render();
+            showToast("Cofnięto zmianę.", "indigo");
+          }
+          return;
+        }
+
+        if ((e.ctrlKey || e.metaKey) && e.code === "KeyY") {
+          e.preventDefault();
+          if (redoStack.length > 0) {
+            undoStack.push(JSON.stringify(elements));
+            elements = JSON.parse(redoStack.pop());
+            preloadImages();
+            saveBoard();
+            render();
+            showToast("Ponowiono zmianę.", "indigo");
+          }
+          return;
+        }
+
+        if ((e.ctrlKey || e.metaKey) && e.code === "KeyD") {
+          e.preventDefault();
+          duplicateSelected();
+          return;
+        }
+
+        if (e.code === "Delete" || e.code === "Backspace") {
+          if (selectedId) {
+            pushHistory();
+            elements = elements.filter((item) => item.id !== selectedId);
+            selectedId = null;
+            saveBoard();
+            render();
+          }
+          return;
+        }
+
+        const keyMap = {
+          KeyV: "select",
+          KeyP: "pen",
+          KeyH: "highlighter",
+          KeyS: "sticky",
+          KeyT: "text",
+          KeyR: "rect",
+          KeyA: "arrow",
+          KeyE: "eraser"
+        };
+        if (!e.ctrlKey && !e.metaKey && keyMap[e.code]) {
+          setTool(keyMap[e.code]);
+        }
+      });
+
+      window.addEventListener("keyup", (e) => {
+        if (e.code === "Space") {
+          isSpacePressed = false;
+          updateCursor();
+        }
+      });
+
+      document.querySelectorAll(".dock-btn").forEach((btn) => {
+        btn.addEventListener("click", () => setTool(btn.dataset.tool));
+      });
+
+      document.querySelectorAll(".jump-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const target = ZONE_BOOKMARKS[btn.dataset.jump];
+          if (!target) return;
+          camera.zoom = target.zoom;
+          camera.x = 60 - target.x * camera.zoom;
+          camera.y = 85 - target.y * camera.zoom;
+          render();
+        });
+      });
+
+      document.querySelectorAll(".swatch-dot").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".swatch-dot").forEach((s) => s.classList.remove("active"));
+          btn.classList.add("active");
+          currentColor = btn.dataset.color;
+          if (selectedId) {
+            const sel = elements.find((e) => e.id === selectedId);
+            if (sel && ["pen", "highlighter", "arrow", "rect", "text"].includes(sel.type)) {
+              pushHistory();
+              sel.color = currentColor;
+              saveBoard();
+              render();
+            }
+          }
+        });
+      });
+
+      document.querySelectorAll(".insp-style-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (!selectedId) return;
+          const sel = elements.find((e) => e.id === selectedId);
+          if (!sel) return;
+          const themeKey = btn.dataset.cardStyle;
+          pushHistory();
+          if (sel.type === "sticky") {
+            sel.theme = themeKey;
+          } else if (CARD_THEMES[themeKey]) {
+            sel.color = CARD_THEMES[themeKey].border;
+          }
+          saveBoard();
+          render();
+        });
+      });
+
+      document.getElementById("btn-insp-duplicate").addEventListener("click", duplicateSelected);
+      document.getElementById("btn-insp-delete").addEventListener("click", () => {
+        if (!selectedId) return;
+        pushHistory();
+        elements = elements.filter((item) => item.id !== selectedId);
+        selectedId = null;
+        saveBoard();
+        render();
+      });
+
+      document.querySelectorAll(".size-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".size-btn").forEach((s) => s.classList.remove("active", "bg-white/15"));
+          btn.classList.add("active", "bg-white/15");
+          currentStrokeSize = Number(btn.dataset.size);
+        });
+      });
+
+      document.getElementById("btn-undo").addEventListener("click", () => {
+        if (undoStack.length === 0) return;
+        redoStack.push(JSON.stringify(elements));
+        elements = JSON.parse(undoStack.pop());
+        preloadImages();
+        saveBoard();
+        render();
+      });
+
+      document.getElementById("btn-redo").addEventListener("click", () => {
+        if (redoStack.length === 0) return;
+        undoStack.push(JSON.stringify(elements));
+        elements = JSON.parse(redoStack.pop());
+        preloadImages();
+        saveBoard();
+        render();
+      });
+
+      document.getElementById("btn-paste-info").addEventListener("click", () => {
+        showToast("Wciśnij Ctrl+V (lub przeciągnij plik), aby wkleić obraz lub tekst w miejscu kursora.", "indigo");
+      });
+
+      document.getElementById("btn-export-png").addEventListener("click", exportBoardToPNG);
+
+      document.getElementById("btn-reset-board").addEventListener("click", () => {
+        pushHistory();
+        elements = buildTwoMindsTemplate();
+        selectedId = null;
+        saveBoard();
+        fitEntireBoard();
+        showToast("Przywrócono szablon TwoMinds Studio.", "success");
+      });
+
+      document.getElementById("btn-zoom-in").addEventListener("click", () => {
+        camera.zoom = Math.min(2.6, camera.zoom * 1.15);
+        render();
+      });
+
+      document.getElementById("btn-zoom-out").addEventListener("click", () => {
+        camera.zoom = Math.max(0.2, camera.zoom * 0.87);
+        render();
+      });
+
+      document.getElementById("btn-fit-view").addEventListener("click", fitEntireBoard);
+      document.getElementById("inline-editor").addEventListener("blur", commitInlineEditor);
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      initEvents();
+      const loaded = loadBoard();
+      if (!loaded) {
+        elements = buildTwoMindsTemplate();
+        saveBoard();
+        fitEntireBoard();
+      } else {
+        render();
+      }
+      showToast("TwoMinds Studio gotowe • Rysuj, edytuj dwuklikiem i wklejaj przez Ctrl+V.", "indigo");
+    });
+  </script>
+</body>
+</html>
